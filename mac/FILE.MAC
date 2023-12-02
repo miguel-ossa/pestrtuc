@@ -1,0 +1,391 @@
+;PURGE fcreate, fopen, fclose, flseek, fwrite, fread
+;*****************************************************************************
+;
+;  FILE.MAC
+; ==========
+;
+;  Conjunto de macros con funciones de ficheros utilizando servicios DOS.
+;
+;  Miquel de la Ossa                            29/06/01 08:37 am
+;
+;*****************************************************************************
+;
+;-----------------------------------------------------------------------------
+;
+; Macro: FCREATE                          23/06/01 06:40 pm
+;
+; Descripci¢n:
+;    Crear un fichero nuevo o truncar a cero la longitud 
+;    de un fichero existente.
+;
+; Par metros:
+;    fichero = Cadena asciiz con unidad, path y nombre del fichero.
+;    atrib   = Atributo del fichero (entrada) (1 palabra).
+;    handle  = Identificador del fichero (file handle) (salida) (1 palabra)
+;              (variable).
+;    error   = N£mero del error (salida) (1 palabra) (variable).
+;              Si no hay error, error = 0.
+;              Los errores posibles son: 3, 4 y 5.
+;
+;-----------------------------------------------------------------------------
+;
+fcreate     MACRO    fichero, atrib, handle, error
+            LOCAL    fcr_bien, fcr_fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  cx
+            push  dx
+;
+; recoger par metros de entrada
+;
+            lea   dx,fichero           ; DX = desplazamiento fichero
+            mov   cx,atrib             ; CX = atributo del fichero
+;
+; cerrar el fichero
+;
+            mov   ah,3Ch               ; funci¢n: cerrar fichero
+            int   21h                  ; llamar al DOS
+;
+; si no error, CF = 0 y AX = identificador fichero
+; si error,    CF = 1 y AX = c¢digo del error
+;
+            jnc   fcr_bien             ; si CF = 0, bifurcar
+;
+; error, poner par metros de salida
+;
+            mov   error,ax             ; c¢digo del error
+            jmp   fcr_fin
+;
+; no error, poner par metros de salida
+;
+fcr_bien:
+            mov   handle,ax            ; file handle
+            mov   error,0              ; error = 0
+;
+; restaurar registros afectados
+;
+fcr_fin:
+            pop   dx
+            pop   cx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: FOPEN                             23/06/01 06:40 pm
+;
+; Descripci¢n:
+;    Abrir un fichero existente.
+;    El puntero de lectura/escritura se posiciona en el primer
+;    byte del fichero.
+;
+; Par metros:
+;    fichero = Cadena asciiz con unidad, path y nombre del fichero.
+;    acceso  = C¢digo de acceso (entrada) (1 byte) (variable, registro,
+;              valor inmediato).
+;    handle  = Identificador del fichero (file handle) (salida) (1 palabra)
+;              (variable).
+;    error   = N£mero del error (salida) (1 palabra) (variable).
+;              Si no hay error, error = 0.
+;              Los errores posibles son: 2, 4, 5 y 12.
+;
+;-----------------------------------------------------------------------------
+;
+fopen       MACRO    fichero, acceso, handle, error
+            LOCAL    fab_bien, fab_fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  dx
+;
+; recoger par metros de entrada
+;
+            lea   dx,fichero        ; dx = desplazamiento fichero
+            mov   al,acceso         ; al = acceso
+;
+; abrir el fichero
+;
+            mov   ah,3Dh            ; funci¢n: abrir fichero
+            int   21h               ; llamar al DOS
+;
+; si no error, CF = 0 y AX = identificador fichero
+; si error,    CF = 1 y AX = c¢digo de error
+;
+            jnc   fab_bien          ; si CF = 0, bifurcar
+;
+; error, poner par metros de salida
+;
+            mov   error,ax          ; c¢digo de error
+            jmp   fab_fin
+;
+; no error, poner par metros de salida
+;
+fab_bien:
+            mov   handle,ax         ; file handle
+            mov   error,0           ; error = 0
+;
+; restaurar registros afectados
+;
+fab_fin:
+            pop   dx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: FCLOSE                          23/06/01 06:30 pm
+;
+; Descripci¢n:
+;    Cerrar un fichero.
+;
+; Par metros:
+;    handle  = Identificador del fichero (file handle) (entrada) (1 palabra)
+;              (variable, registro BX).
+;    errpr   = N£mero del error (salida) (1 palabra) (variable).
+;              Si no hay error, error = 0.
+;              El £nico error posible es el 6.
+;
+;-----------------------------------------------------------------------------
+;
+fclose      MACRO    handle, error
+            LOCAL    fce_bien, fce_fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  dx
+;
+; recoger par metro de entrada
+;
+            mov   bx,handle         ; BX = identificador fichero
+;
+; cerrar el fichero
+;
+            mov   ah,3Eh            ; funci¢n: cerrar fichero
+            int   21h               ; llamar al DOS
+;
+; si no error, CF = 0
+; si error,    CF = 1 y AX = c¢digo del error
+;
+            jnc   fce_bien          ; si CF = 0, bifurcar
+;
+; error, poner par metro de salida
+;
+            mov   error,ax          ; c¢digo del error
+            jmp   fce_fin
+;
+; no error, poner par metro de salida
+;
+fce_bien:
+            mov   error,0           ; error = 0
+;
+; restaurar registros afectados
+;
+fce_fin:
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: FLSEEK                           23/06/01 07:06 pm
+;
+; Descripci¢n:
+;    Mover puntero de lectura/escritura al final del fichero.
+;
+; Par metros:
+;    handle  = Identificador del fichero (file handle) (entrada) (1 palabra)
+;              (variable o registro BX).
+;    error   = N£mero del error (salida) (1 palabra) (variable)
+;              Si no hay error, error = 0.
+;              Los errores posibles son: 1 y 6.
+;
+;-----------------------------------------------------------------------------
+;
+flseek      MACRO    handle, error
+            LOCAL    okay, fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  cx
+            push  dx
+;
+; recoger par metros de entrada
+;
+            mov   bx,handle            ; BX = identificador fichero
+;
+; desplazamiento del puntero
+;
+            mov   cx,0                 ; CX = DX = 0 (desplazamiento)
+            mov   dx,0
+            mov   al,2                 ; indica mover putnero al final del 
+                                       ; fichero + desplazamiento
+;
+; mover puntero
+;
+            mov   ah,42h               ; funci¢n: mover puntero
+            int   21h                  ; llamar al DOS
+;
+; si no error, CF = 0
+; si error,    CF = 1 y AX = c¢digo del error
+;
+            jnc   okay                 ; Si CF = 0, bifurcar
+;
+; error, poner par metro de salida
+;
+            mov   error,ax             ; c¢digo del error
+            jmp   fin
+;
+; no error, poner par metros de salida
+;
+okay:
+            mov   error,0              ; error = 0
+;
+; restaurar registros afectados
+;
+fin:
+            pop   dx
+            pop   cx
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: FWRITE                           23/06/01 06:50 pm
+;
+; Descripci¢n:
+;    Grabar un registro en un fichero.
+;    Los bytes se graban a partir de la actual posici¢n del puntero
+;    sobre el fichero.
+;
+; Par metros:
+;    handle  = Identificador del fichero (file handle) (entrada) (1 palabra)
+;              (variable o registro BX).
+;    nbytes1 = N£mero de bytes a grabar (entrada) (1 palabra) (variable,
+;              registro CX, valor inmediato).
+;    area    = Area a grabar (entrada) (variable).
+;    nbytes2 = N£mero de bytes grabados (salida) (1 palabra) (variable).
+;    error   = N£mero del error (salida) (1 palabra) (variable)
+;              Si no hay error, error = 0.
+;              Los errores posibles son: 5 y 6.
+;
+;-----------------------------------------------------------------------------
+;
+fwrite      MACRO    handle, nbytes1, area, nbytes2, error
+            LOCAL    fgr_bien, fgr_fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  cx
+            push  dx
+;
+; recoger par metros de entrada
+;
+            mov   bx,handle            ; BX = identificador fichero
+            mov   cx,nbytes1           ; CX = nro. de bytes a grabar
+            lea   dx,area              ; DS:DX apunta al  rea a grabar
+;
+; grabar registro
+;
+            mov   ah,40h               ; funci¢n: grabar registro
+            int   21h                  ; llamar al DOS
+                                       ; AX = nro. de bytes grabados
+;
+; si no error, CF = 0
+; si error,    CF = 1 y AX = c¢digo del error
+            jnc   fgr_bien             ; Si CF = 0, bifurcar
+;
+; error, poner par metro de salida
+;
+            mov   error,ax             ; c¢digo del error
+            jmp   fgr_fin
+;
+; no error, poner par metros de salida
+;
+fgr_bien:
+            mov   nbytes2,ax           ; nro. de bytes grabados
+            mov   error,0              ; error = 0
+;
+; restaurar registros afectados
+;
+fgr_fin:
+            pop   dx
+            pop   cx
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: FREAD                            23/06/01 07:00 pm
+;
+; Descripci¢n:
+;    Leer un cierto n£mero de bytes de un fichero.
+;    Los bytes se leen a partir de la actual posici¢n del puntero
+;    sobre el fichero.
+;    Si el n£mero de bytes leidos es cero, se alcanz¢ el fin de fichero.
+;
+; Par metros:
+;    handle  = Identificador del fichero (file handle) (entrada) (1 palabra)
+;              (variable o registro BX).
+;    nbytes1 = N£mero de bytes a leer (entrada) (1 palabra) (variable,
+;              registro CX, valor inmediato).
+;    area    = Area de lectura (salida) (variable).
+;    nbytes2 = N£mero de bytes leidos (salida) (1 palabra) (variable).
+;              Si es cero, se ha tratado de leer a partir del fin
+;              de fichero.
+;    error   = N£mero del error (salida) (1 palabra) (variable)
+;              Si no hay error, error = 0.
+;              Los errores posibles son: 5 y 6.
+;
+;-----------------------------------------------------------------------------
+;
+fread       MACRO    handle, nbytes1, area, nbytes2, error
+            LOCAL    fle_bien, fle_fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  cx
+            push  dx
+;
+; recoger par metros de entrada
+;
+            mov   bx,handle            ; BX = identificador fichero
+            mov   cx,nbytes1           ; CX = nro. de bytes a leer
+            lea   dx,area              ; DS:DX apunta al  rea de lectura
+;
+; leer registro del fichero
+;
+            mov   ah,3Fh               ; funci¢n: leer registro
+            int   21h                  ; llamar al DOS
+                                       ; AX = nro. de bytes leidos
+;
+; si no error, CF = 0
+; si error,    CF = 1 y AX = c¢digo del error
+;
+            jnc   fle_bien             ; Si CF = 0, bifurcar
+;
+; error, poner par metro de salida
+;
+            mov   error,ax             ; c¢digo del error
+            jmp   fle_fin
+;
+; no error, poner par metros de salida
+;
+fle_bien:
+            mov   nbytes2,ax           ; nro. de bytes leidos
+            mov   error,0              ; error = 0
+;
+; restaurar registros afectados
+;
+fgr_fin:
+            pop   dx
+            pop   cx
+            pop   bx
+            pop   ax
+            ENDM

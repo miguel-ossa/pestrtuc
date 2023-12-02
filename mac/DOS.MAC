@@ -1,0 +1,51 @@
+;PURGE write_string, write_char
+;          ****************************************************
+;                      MACROS DE ESTRUCTURAS DOS
+;          ****************************************************
+;
+; Miquel de la Ossa     Octubre 1.999
+;
+CR       EQU      0dh
+LF       EQU      0ah
+
+IFNDEF write_string     ; OBSOLETA. Utilizar @ShowStr de Dos.inc
+;*********************************************
+; IMPRESION DE UNA 'SERIE' POR SALIDA STANDARD
+;*********************************************
+write_string   MACRO string
+         mov   ah,09h         ; Funcion: write string to standard output
+         mov   dx,offset string
+         int   21h
+         ENDM
+ENDIF
+IFNDEF   write_char
+;*********************************************
+; IMPRESION DE UN CARACTER POR SALIDA STANDARD
+;*********************************************
+write_char  MACRO char
+         mov   ah,02          ; Funci¢n: write character to standard output
+         mov   dl,char
+         int   21h
+         ENDM
+ENDIF
+;********************************
+; AREA PARA EL MANEJO DE FICHEROS
+;********************************
+cabec_fich2       MACRO numf
+handl_fich&numf   dw    ?         ;handle del fichero
+maxn_fich&numf    db    49        ;tamaño máximo nombre fich.
+longn_fich&numf   db    ?         ;tamaño real nombre fich.
+nomb_fich&numf    db    50 dup (?);buffer del nombre fich.
+                  ENDM
+;***********************************************
+; DEFINICION DE AREAS PARA EL MANEJO DE FICHEROS
+; (Debe utilizarse dentro del segmento de datos)
+;***********************************************
+contf             =     0        ;define símbolo dinámico
+                                 ;y val. inicial
+cabec_fich        MACRO numf
+                  REPT  numf           ;repite bloque "numf" veces
+                  cabec_fich2 %contf   ;crea bloque número "contf"
+contf             =     contf + 1   ;incrementa símbolo
+                  ENDM        ;final bloque repetición
+                  ENDM        ;final macro "cabec_fich"

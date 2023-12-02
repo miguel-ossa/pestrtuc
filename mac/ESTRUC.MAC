@@ -1,0 +1,384 @@
+; PURGE ifk, ifelse, ifend, dowhilek, doend, repeatk, until, fork, forend
+;;******************************************************************************
+;;
+;; DEFINICION DE LAS MACROS DE CONTROL ESTRUCTURADO
+;;
+;; Miquel de la Ossa                                     25/06/01 06:50 pm
+;;
+;;******************************************************************************
+;;
+;; Funcionamiento de las macros:
+;;
+;; IFK - IFELSE - IFEND : OBSOLETAS. Utilizar .IF
+;;    Ejecutar CMP y a continuaci½n, llamar a IFK: IFK e/z/nz/'etc'
+;;
+;; IFK e
+;;    IFK e
+;;    IFELSE
+;;    IFEND
+;; IFELSE
+;;    IFK e
+;;    IFELSE
+;;    IFEND
+;; IFEND
+;;
+;; DOWHILEK - DOEND :
+;;    Ejecutar: DOWHILEK ax,le,bx, que significa: ejecutar el bucle mientras
+;;              ax sea menor o igual a bx. (NOTA: 'le' formarÿ parte de una
+;;              instrucci½n de bifurcaci½n condicional, en la forma 'jle').
+;;
+;; DOWHILEK ax,le,bx
+;; DOEND
+;;
+;; REPEATK- UNTIL:
+;;    Ejecutar REPEATK .. UNTIL ax,e,bx (ax sea igual a bx)
+;;
+;; REPEATK
+;; UNTIL ax,e,bx
+;;
+;; FORK - FOREND :
+;;    Ejecutar: FORK ax,10,20,+,5 .. FOREND. (Utiliza ax para definir un bucle
+;;              que incremente de 10 hasta 20 en intervalos de 5).
+;;              NOTA: Puede utilizarse el signo '-' para decrementar.
+;;
+;; FORK ax,10,20,+
+;; ...
+;; FOREND
+;;
+;; CASEK :
+;;    Ejecutar: CASEK al,<'A','B','C'>,<subA,subB,subC>
+;;    Luego, definir etiquetas, en la forma:
+;;
+;;  subA:
+;;   ...
+;;   jmp salida
+;;  subB:
+;;   ...
+;;   jmp salida
+;;  subC:
+;;   ...
+;;   jmp salida
+;;  others:
+;;   ...
+;;  salida:
+IFNDEF   CIERTO
+   FALSO       EQU   0
+   CIERTO      EQU   0FFFFh
+ENDIF
+;; ** TESTSIM ******************************************************************
+;; Comprueba que el nivel de anidado ha sido definido. Si no lo esta, establece
+;; ?SIMDEF para que inicialice el contador para este nivel. Todo sucede normal-
+;; mente durante el Paso 1: inicializa contadores a 0. Los simbolos deben ser
+;; inicializados de nuevo al comienzo del Paso 2.
+;; Observese que "?p2sw ..." significa "Switch del Paso 2..."
+;; Comprueba que el nivel 10 de anidado es el que primero se reinicializa.
+;; Nota: se elige 10 como valor inicial con el fin de reservar dos digitos para
+;; el nivel de anidado.
+;;
+testsim   MACRO    p1,p2
+
+          IF1                        ;; en primer paso, comprobar definicion
+            IFNDEF   &p1&p2
+?p2sw&p1&p2       =        CIERTO   ;; en segundo paso, redefine switch
+?simdef           =        FALSO    ;; fuerza inicializacion del contador
+            ELSE
+?simdef           =        CIERTO   ;; autoriza incremento del contador
+            ENDIF
+          ENDIF
+;          IF2                        ;; en segundo paso, fuerza reinicializacion
+;
+;            IF       (?p2sw&p1&p2)     ;; si aun no esta reinicializado...
+;?p2sw&p1&p2       =        FALSO    ;; borra paso 2, redefine switch
+;              IF       (?p2sw&p1&10)    ;; ... y comprueba inicializ. nivel 10
+;         %out     * ERROR: &p1 nivel de anidado sin cerrar en paso 2 *
+;              ENDIF
+;
+;?simdef           =        FALSO    ;; fuerza reinicializacion del contador
+;            ELSE
+;?simdef           =        CIERTO   ;; autoriza incremento del contador
+;            ENDIF
+;          ENDIF
+
+          ENDM
+;; ** CEROSIM ************************************************** MACRO DE APOYO
+;; Inicializa el contador de la secuencia de anidado (primera vez).
+cerosim  MACRO    p1,p2
+&p1&p2   =        0
+         ENDM
+;; ** INCRSIM ************************************************** MACRO DE APOYO
+;; Incrementa el contador de la secuencia de anidado.
+incrsim  MACRO    p1,p2
+&p1&p2   =        &p1&p2 + 1
+         ENDM
+;; ** DECRSIM ************************************************** MACRO DE APOYO
+;; Decrementa el contador de la secuencia de anidado.
+decrsim  MACRO    p1,p2
+&p1&p2   =        &p1&p2 - 1
+         ENDM
+;; ** SALTO2 *************************************************** MACRO DE APOYO
+;; Inserta, en codigo, instruccion JMP real y destino
+salto2   MACRO    p1,p2,p3
+         jmp      &p1&p2&p3
+         ENDM
+;; ** SALTO **************************************************** MACRO DE APOYO
+;; Cambia formato simbolos para obtener instruccion JMP.
+salto    MACRO    p1,p2,p3
+??tmp    =        &p3&p2
+         salto2   p1,p2,%??tmp
+         ENDM
+;; ** ETSALT2 ************************************************** MACRO DE APOYO
+;; Inserta, en codigo, etiqueta real de destino de JMP.
+etsalt2  MACRO    p1,p2,p3
+&p1&p2&p3:
+         ENDM
+;; ** ETSALTO ************************************************** MACRO DE APOYO
+;; Cambia formato simbolos para obtener etiqueta de destino de JMP.
+etsalto  MACRO    p1,p2,p3
+??tmp    =        &p3&p2
+         etsalt2  p1,p2,%??tmp
+         ENDM
+;; ** IF      ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro de IF estructurado: IF cierto
+ifk      MACRO    p1
+         LOCAL    ifcierto
+         j&p1     ifcierto       ;; salta a la seccion IF del codigo
+         IFNDEF   ?if_nivel      ;; establece nuevo nivel de anidado
+?if_nivel         =        10
+         ELSE
+?if_nivel         =        ?if_nivel + 1
+         ENDIF
+         testsim  ?if_anid,%?if_nivel  ;; establece nuevo nœm. secuencia
+         IF       (?simdef)
+         		incrsim  	?if_anid,%?if_nivel
+         ELSE
+         		cerosim  	?if_anid,%?if_nivel
+         ENDIF
+;; Inserta bifurcacion a secciones ELSE o IF NOT dentro del codigo
+         salto    ?if_,%?if_nivel,?if_anid
+ifcierto:
+         ENDM
+;; ** IFELSE  ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro ELSE estructurada
+ifelse   MACRO
+         IFNDEF   ?if_nivel
+; ERROR: IFELSE sin sentencia IFC
+         		EXITM
+         ENDIF
+         IF (?if_nivel LT 10)
+; ERROR: IFELSE sin sentencia IFC
+         		EXITM
+         ENDIF
+;; Generacion del codigo para IFELSE
+         incrsim  ?if_anid,%?if_nivel
+         salto    ?if_,%?if_nivel,?if_anid
+         decrsim  ?if_anid,%?if_nivel
+         etsalto  ?if_,%?if_nivel,?if_anid
+         incrsim  ?if_anid,%?if_nivel
+         ENDM
+;; ** IFEND   ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro END estructurada para combinar con IFC
+ifend    MACRO
+         IFNDEF   ?if_nivel
+; ERROR: IFEND sin sentencia IFC
+         		EXITM
+         ENDIF
+         IF (?if_nivel LT 10)
+; ERROR: IFEND sin sentencia IFC
+         		EXITM
+         ENDIF
+;; Generacion de etiqueta IFEND
+         etsalto  ?if_,%?if_nivel,?if_anid
+?if_nivel         =        ?if_nivel - 1
+         ENDM
+;; ** DOWHILEK ******************************* MACRO DE CONTROL ESTRUCTURADO **
+;; Macro DO_WHILE estructurada
+dowhilek MACRO    p1,p2,p3
+         LOCAL    ifcierto
+         IFNDEF   ?do_nivel      ;; establece nuevo nivel de anidado
+?do_nivel         =        10
+         ELSE
+?do_nivel         =        ?do_nivel + 1
+         ENDIF
+;; Establece nuevo numero de secuencia para nivel de anidado
+         testsim  ?do_anid,%?do_nivel
+         IF       (?simdef)
+         		incrsim  	?do_anid,%?do_nivel
+         ELSE
+         		cerosim  	?do_anid,%?do_nivel
+         ENDIF
+;; Inserta etiqueta inicial del bucle (para salto)
+         etsalto  ?do_,%?do_nivel,?do_anid
+;; Inserta, en codigo, comprobacion de condicion
+         cmp      &p1,&p3
+;; Salta a la seccion de codigo de DO_WHILE (CIERTO)
+         j&p2     ifcierto
+;; Pasa a la etiqueta siguiente de la secuencia
+         incrsim  ?do_anid,%?do_nivel
+;; Inserta, en codigo, salto al final del bucle
+         salto    ?do_,%?do_nivel,?do_anid
+;; Comienza la seccion de codigo de DO_WHILE (CIERTO)
+
+ifcierto:
+         ENDM
+;; ** DOEXIT  ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro DO_EXIT estructurada para combinar con DOWHILE
+doexit   MACRO
+;; Inserta salto a codigo de final de bucle
+         salto    ?do_,%?do_nivel,?do_anid
+         ENDM
+;; ** DOEND   ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro DO_END estructurada para combinar con DOWHILE
+;; La macro DOEND genera el codigo de una ENDDO estructurada
+doend    MACRO
+         IFNDEF   ?do_nivel
+; ERROR: DOEND sin sentencia DOWHILE
+         		EXITM
+         ENDIF
+         IF       (?do_nivel LT 10)
+; ERROR: DOEND sin sentencia DOWHILE
+         		EXITM
+         ENDIF
+;; Vuelta a la etiqueta anterior en la secuencia
+         decrsim  ?do_anid,%?do_nivel
+;; Genera salto al comienzo del bucle
+         salto    ?do_,%?do_nivel,?do_anid
+
+;; Va a la siguiente etiqueta en la secuencia
+         incrsim  ?do_anid,%?do_nivel
+;; Genera etiqueta DOEND
+         etsalto  ?do_,%?do_nivel,?do_anid
+?do_nivel         =        ?do_nivel - 1
+         ENDM
+;; ** REPEATK ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro REPEATK estructurada
+;; REPEATK genera el codigo de REPEAT-UNTIL estructurada
+repeatk  MACRO
+         IFNDEF   ?rep_nivel     ;; establece nuevo nivel de anidado
+?rep_nivel        =        10
+         ELSE
+?rep_nivel        =        ?rep_nivel + 1
+         ENDIF
+;; Establece nuevo nœmero de secuencia para nivel de anidado
+         testsim  ?rep_anid,%?rep_nivel
+         IF       (?simdef)
+         		incrsim  	?rep_anid,%?rep_nivel
+         ELSE
+         		cerosim  	?rep_anid,%?rep_nivel
+         ENDIF
+;; Inserta etiqueta inicial del bucle (para salto)
+         etsalto    ?rep_,%?rep_nivel,?rep_anid
+         ENDM
+;; ** UNTIL   ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro UNTIL estructurada para combinar con REPEAT
+until    MACRO    p1,p2,p3
+         LOCAL    ifcierto
+         IFNDEF   ?rep_nivel
+; ERROR: UNTIL sin sentencia REPEAT
+         EXITM
+         ENDIF
+         IF       (?rep_nivel LT 10)
+; ERROR: UNTIL sin sentencia REPEAT
+         EIXTM
+         ENDIF
+;; Inserta, en codigo, comprobacion de la condicion
+         cmp      &p1,&p3
+;; Salto a la seccion de codigo UNTIL: CIERTO
+         j&p2     ifcierto
+;; Inserta, en codigo, salto a comienzo del bucle
+         salto    ?rep_,%?rep_nivel,?rep_anid
+ifcierto:
+?rep_nivel        =        ?rep_nivel - 1
+         ENDM
+;; ** FOR     ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro FOR estructurada. Utilicese asi:
+;;       FOR   contador,inicio,final,signo
+;;
+fork     MACRO    p1,p2,p3,p4,p5
+         LOCAL    primero
+         LOCAL    ifcierto
+         IFNDEF   ?for_nivel     ;; establece nuevo nivel de anidado
+?for_nivel        =        10
+         ELSE
+?for_nivel        =        ?for_nivel + 1
+         ENDIF
+;; Establece nuevo nœmero de secuencia para nivel de anidado
+         testsim  ?for_anid,%?for_nivel
+         IF       (?simdef)
+            incrsim   ?for_anid,%?for_nivel
+         ELSE
+            cerosim   ?for_anid,%?for_nivel
+         ENDIF
+;; Inserta inicializacion de contador en el codigo: (evitando paso 1)
+         mov      &p1,&p2        ; Inicializa contador
+         jmp      primero        ; Comienza bucle FOR
+;; Inserta etiqueta inicio bucle para salto
+            etsalto   ?for_,%?for_nivel,?for_anid
+;; Inserta calculo paso en codigo, y comprueba que el paso es correcto
+         IFIDN    <p4>,<+>
+            add       &p1,&p5        ; Incremento de contador
+         ELSE
+            IFIDN    <p4>,<->
+                sub       &p1,&p5        ; Decremento de contador
+            ELSE
+; ERROR: especificacion de paso incorrecta para sentencia FOR
+                EXITM
+            ENDIF
+         ENDIF
+primero:                         ; Comprueba la continuaci½n
+;; Inserta en el codigo la comprobacion de condicion
+         cmp      &p1,&p3        ; ¿Se alcanzo el final?
+;; Salto a la seccion de codigo de FOR: CIERTO
+         IFIDN    <p4>,<+>
+            jl        ifcierto       ; No: continua en el bucle FOR
+         ELSE                    ;; caso '-' (por defecto)
+            jg        ifcierto       ; No: continua en el bucle FOR
+         ENDIF
+;; Pasa a la etiqueta siguiente
+         incrsim  ?for_anid,%?for_nivel
+;; Inserta, en c½digo, salto al final del bucle
+         salto    ?for_,%?for_nivel,?for_anid
+ifcierto:
+         ENDM
+;; ** FOREND  ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro FOR_END estructurada para combinar con FOR
+;; FOREND genera el codigo de un bucle FOR estructurado
+forend   MACRO
+         IFNDEF   ?for_nivel
+; ERROR: FOREND sin sentencia FOR
+            EXITM
+         ENDIF
+         IF       (?for_nivel LT 10)
+; ERROR: FOREND sin sentencia FOR
+            EXITM
+         ENDIF
+;; Vuelta a la etiqueta anterior de la secuencia
+         decrsim  ?for_anid,%?for_nivel
+;; Genera salto al comienzo del bucle
+         salto    ?for_,%?for_nivel,?for_anid
+;; Pasa a la siguiente etiqueta de la secuencia
+         incrsim  ?for_anid,%?for_nivel
+;; Genera etiqueta FOREND
+         etsalto  ?for_,%?for_nivel,?for_anid
+?for_nivel        =        ?for_nivel - 1
+         ENDM
+;; ** CASE    ******************************** MACRO DE CONTROL ESTRUCTURADO **
+;; Macro CASE estructurada. Utilicese asi:
+;;       CASE reg,<caso1,caso2>,<etiq1,etiq2>
+;;
+casek    MACRO clave,list_casos,ets_salto
+         ??tmp_1  =  0
+         irp      match,<&list_casos>     ;; recorre "casos"...
+            ??tmp_1  =  ??tmp_1  +  1        ;; ...variando el indice
+            cmp      clave,&&match           ; ¿Coindicen?
+            ??tmp_2  =  0
+            irp      retl,<&ets_salto>       ;; recorre las bifurcacionies
+                ??tmp_2  =  ??tmp_2  +  1        ;; ...hasta que los indices...
+                IF (??tmp_1 eq ??tmp_2)          ;; ...sean iguales
+                    je      &&&retl                    ;; ¡ya!
+                    EXITM
+                ENDIF
+            ENDM
+         ENDM
+
+         ENDM
+;; ****************************************************************************

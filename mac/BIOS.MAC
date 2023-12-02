@@ -1,0 +1,230 @@
+;PURGE getvideo, getcurxy, gotoxy, wrichar, wristr
+;*****************************************************************************
+;
+;  BIOS.MAC
+; ==========
+;
+;  Conjunto de macros con funciones de la BIOS.
+;
+;  Miquel de la Ossa                            29/06/01 12:08 pm
+;
+;*****************************************************************************
+;
+;-----------------------------------------------------------------------------
+;
+; Macro: GETVIDEO                         23/06/01 07:21 pm
+;
+; Descripci¢n:
+;    Obtener el modo de funcionamiento de la pantalla.
+;
+; Par metros:
+;    modo    = modo pantalla (salida) (1 byte) (variable, registro
+;              distinto de AX o BX).
+;
+;              0 - 40 x 25 alfanum‚rica, blanco y negro
+;              1 - 40 x 25 alfanum‚rica, color
+;              2 - 80 x 25 alfanum‚rica, blanco y negro
+;              3 - 80 x 25 alfanum‚rica, color
+;              4 - 320 x 200 gr fica, color
+;              5 - 320 x 200 gr fica, blanco y negro
+;              6 - 640 x 200 gr fica, blanco y negro
+;    pag     = n£mero de la p gina (salida) (1 byte) (variable, registro
+;              distinto de AX o BX).
+;
+;-----------------------------------------------------------------------------
+;
+getvideo    MACRO    modo, pag
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+;
+; obtener el estado de la pantalla
+;
+            mov   ah,15             ; funci¢n: obtener estado pantalla
+            int   10h               ; llamar al BIOS
+                                    ; AL = modo, BH = p gina activa
+;
+; poner par metros de salida
+;
+            mov   modo,al           ; modo
+            mov   pag,bh            ; p gina activa
+;
+; restaurar registros afectados
+;
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: GETCURXY                         23/06/01 07:12 pm
+;
+; Descripci¢n:
+;    Obtener la posici¢n actual del cursor en la pantalla.
+;    Supone p gina 0.
+;
+; Par metros:
+;    x       = columna (0 a 79) (salida) (1 byte) (variable o registro).
+;    y       = fila (0 a 24) (salida) (1 byte) (variable o registro).
+;
+;-----------------------------------------------------------------------------
+;
+getcurxy    MACRO    x, y
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  dx
+;
+            mov   bh,0              ; n£mero p gina = 0
+            mov   ah,03h            ; funci¢n: leer pos. del cursor
+            int   10h               ; llamar al BIOS
+;
+; poner par metros de salida
+;
+            mov   x,dl              ; x (columna)
+            mov   y,dh              ; y (fila)
+;
+; restaurar registros afectados
+;
+            pop   dx
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: GOTOXY                           23/06/01 07:12 pm
+;
+; Descripci¢n:
+;    Posicionar el cursor en al pantalla.
+;    Supone p gina 0.
+;    Si la fila o la columna est n fuera de l¡mites, se ignora.
+;
+; Par metros:
+;    x       = columna (0 a 79) (entrada) (1 byte) (variable,
+;              registro o n£mero).
+;    y       = fila (0 a 24) (entrada) (1 byte) (variable, 
+;              registro o n£mero).
+;
+;-----------------------------------------------------------------------------
+;
+gotoxy      MACRO    x, y
+            LOCAL    fin
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  dx
+;
+; recoger par metros de entrada
+;
+            mov   dl,x              ; DL = columna
+            cmp   dl,0
+            jl    fin
+            cmp   dl,79
+            jg    fin
+;
+            mov   dh,y              ; DH = fila
+            cmp   dh,0
+            jl    fin
+            cmp   dh,24
+            jg    fin
+;
+            mov   bh,0              ; p gina 0
+            mov   ah,2              ; funci¢n: posicionar cursor
+            int   10h               ; llamar al BIOS
+;
+; restaurar registros afectados
+;
+fin:
+            pop   dx
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: WRICHAR                          25/06/01 03:38 pm
+;
+; Descripci¢n:
+;    Escribir un caracter en la posicion actual del cursor.
+;    Supone p gina 0.
+;
+; Par metros:
+;    car     = caracter (entrada) (1 byte) (variable o registro).
+;    rep     = numero de repeticiones (entrada) (1 palabra) 
+;
+;-----------------------------------------------------------------------------
+;
+wrichar     MACRO    car, rep
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  cx
+;
+; recoger par metros de entrada
+;
+            mov   ah,0Ah            ; Funcion: write character at cursor pos.
+            mov   al,&car
+            mov   bh,0
+            mov   cx,&rep
+
+            int   10h
+;
+; restaurar registros afectados
+;
+            pop   cx
+            pop   bx
+            pop   ax
+            ENDM
+;-----------------------------------------------------------------------------
+;
+; Macro: WRISTR                           25/06/01 03:38 pm
+;
+; Descripci¢n:
+;    Escribir un string en la posicion actual del cursor.  
+;    Supone p gina 0.
+;
+; Par metros:
+;    string   = string  (entrada) (n bytes)
+;    longitud = longitud del string (entrada) (palabra)
+;
+;-----------------------------------------------------------------------------
+;
+wristr      MACRO    string, longitud
+;
+; salvar registros afectados
+;
+            push  ax
+            push  bx
+            push  cx
+            push  dx
+            push  bp
+;
+; recoger par metros de entrada
+;
+            getcurxy _x,_y          ; obtener posicion actual del cursor
+
+            mov   ah,13h            ; Funcion: write string
+            mov   al,0              ; update cursor after writing
+            mov   bh,0              ; page
+            mov   bl,7              ; attribute (normal)
+            mov   cx,&longitud      ; lenght
+            mov   dh,_y             ; row
+            mov   dl,_x             ; column
+            mov   bp,offset &string ; string
+
+            int   10h
+;
+; restaurar registros afectados
+;
+            pop   bp
+            pop   dx
+            pop   cx
+            pop   bx
+            pop   ax
+            ENDM

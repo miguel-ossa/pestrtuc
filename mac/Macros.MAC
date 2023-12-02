@@ -1,0 +1,139 @@
+;PURGE copy_string
+;          ****************************************************
+;                            MACROS VARIADAS
+;          ****************************************************
+;
+; Miquel de la Ossa     Julio 2.003
+;
+IFNDEF   CIERTO
+   FALSO       EQU   0
+   CIERTO      EQU   0FFFFh
+ENDIF
+
+IFNDEF copy_string
+;*********************************************
+; COPIA DE UN STRING A OTRO, SEGUN LONGITUD
+;*********************************************
+copy_string   MACRO origen,destino,longitud
+          lea       si,&origen
+          lea       di,&destino
+          mov       cx,&longitud
+          cld                                 ;df = 0 para mover hacia adelante
+          rep       movsb
+          ENDM
+ENDIF
+IFNDEF busca_str
+;*********************************************
+; BUSCA UN STRING EN OTRO
+;*********************************************
+busca_str     macro p1,p2
+          lea       esi,&p1
+          lea       edi,&p2
+          mov       ecx,lengthof &p2
+          mov       eax,0
+          std
+          repe      scasb
+          lea       esi,byte ptr &p1
+          lea       edi,byte ptr &p2
+          cld
+          repe      cmpsb
+          endm
+ENDIF
+IFNDEF move_str
+;*********************************************
+; COPIA UN STRING EN OTRO
+;*********************************************
+move_str      macro p1,p2
+          lea       esi,&p1
+          lea       edi,&p2
+          mov       ecx,lengthof &p2
+          cld
+          rep     movsb
+          endm
+ENDIF
+
+IFNDEF ?reg
+;*********************************************
+; DETERMINAR SI EL ARGUMENTO ES UN REGISTRO
+;*********************************************
+?reg      macro     arg
+?esr8       =     FALSO
+?esr16      =     FALSO
+?esr32      =     FALSO
+;Registros de 32 bits
+          irp       reg,<eax,ebx,ecx,edx,ebp,esp,esi,edi,
+                         EAX,EBX,ECX,EDX,EBP,ESP,ESI,EDI>
+            ifidn     <&&reg>,<&arg>
+              ?esr32    =   CIERTO
+              exitm
+            endif
+          endm
+;;Si coincide, paramos aqui
+          if    (?esr32)
+            exitm
+          endif
+;Registros de 16 bits
+          irp       reg,<ax,bx,cx,dx,bp,sp,si,di,ds,es,ss,fs,gs,
+                         AX,BX,CX,DX,BP,SP,SI,DI,DS,ES,SS,FS,GS>
+            ifidn     <&&reg>,<&arg>
+              ?esr16    =   CIERTO
+              exitm
+            endif
+          endm
+;;Si coincide, paramos aqui
+          if    (?esr16)
+            exitm
+          endif
+;Registros de 8 bits
+          irp       reg,<ah,bh,ch,dh,al,bl,cl,dl,
+                         BH,BH,CH,DH,AL,BL,CL,DI>
+            ifidn     <&&reg>,<&arg>
+              ?esr8     =   CIERTO
+              exitm
+            endif
+          endm
+;;Si coincide, paramos aqui
+          if    (?esr8)
+            exitm
+          endif
+          endm
+ENDIF
+
+IFNDEF Casex
+;*********************************************
+; MACRO CASEX ESTRUCTURADA
+;*********************************************
+Casex       macro     variable
+?CasexVar       =     &variable
+            endm
+ENDIF
+
+IFNDEF CasexOption
+;*********************************************
+; MACRO CASEX ESTRUCTURADA: CASEXOPTION
+;*********************************************
+CasexOption macro     num,rut
+            if    (?CasexVar = &num )
+                call  &rut&num      ;rutina debe estar definida
+            endif
+            endm
+ENDIF
+
+IFNDEF CasexElse
+;*********************************************
+; MACRO CASEX ESTRUCTURADA: CASEXELSE
+;*********************************************
+CasexElse   macro     rutina
+
+            jmp       &rutina
+            endm
+ENDIF
+
+IFNDEF CasexEnd
+;*********************************************
+; MACRO CASEX ESTRUCTURADA: CASEXEND
+;*********************************************
+CasexEnd    macro
+;nada
+            endm
+ENDIF

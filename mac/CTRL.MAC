@@ -1,0 +1,178 @@
+;PURGE inipila,iniprog,final,vis_ser,teclea,push_im,push_imof,push_op
+;          ****************************************************
+;            MACROS DE CONTROL PARA LA ESCRITURA DE PROGRAMAS
+;          ****************************************************
+;
+; Miquel de la Ossa     Octubre 1.999
+;
+IFNDEF   CIERTO
+   FALSO       EQU   0
+   CIERTO      EQU   0FFFFh
+ENDIF
+;******************************
+; CREACION DEL SEGMENTO DE PILA
+;******************************
+inipila	MACRO
+seg_pil	segment	stack
+         db       32 dup ('pila    ')
+seg_pil	ends
+        ENDM
+;*********************************************
+; INICIALIZACION SEGMENTO DE CODIGO Y DE DATOS
+;*********************************************
+iniprog MACRO  segcod,segdat
+               assume cs:segcod,ds:segdat
+inicio:        ; punto de entrada principal
+         mov   ax,segdat
+         mov   ds,ax       ; establece segmento datos
+         mov   es,ax       ; establece segmento extra
+			ENDM
+;*************************
+; TERMINACION DEL PROGRAMA
+;*************************
+final		MACRO
+         mov   ax,04C00h   ; termina proceso
+			   int   21h
+			ENDM
+;****************************************
+; VISUALIZACION DE UNA SERIE POR PANTALLA (INTERNA)
+;****************************************
+vis_ser  MACRO    serie    ; visualiza una serie
+         mov      dx,offset serie
+         mov      ah,09h
+         int      21h
+			ENDM
+;*******************************
+; MUESTRA UNA SERIE POR PANTALLA
+;*******************************
+teclea   MACRO    serie    ; define y visualiza serie
+         LOCAL    dirs
+seg_cod  ends              ; fin segmento código
+seg_dat  segment           ; cambia a segmento datos
+dirs     db       serie,'$'; define serie en segmento datos
+seg_dat  ends              ; fin segmento datos
+seg_cod  segment           ; vuelta al segmento código
+         vis_ser  dirs     ; visualiza serie
+         ENDM
+;******************************************
+; IDENTIFICA SI EL OPERANDO ES UN REGISTRO,
+; INDICANDONOS ADEMAS, DE QUE TIPO
+;******************************************
+?reg     MACRO    arg
+?esr8    =        FALSO       ;inicializados cada vez
+?esr16   =        FALSO       ;que se llama a la macro
+         IRP      reg,<ax,bx,cx,dx,bp,sp,si,di,cs,ds,es,ss>
+;reg se referencia con dos "&" porque está en 2do. nivel anidado
+            IFIDN <&&reg>,<&arg>
+               ?esr16 = CIERTO
+               EXITM    ;salir de macro IRP
+            ENDIF
+         ENDM           ;fin de macro IRP
+;; Si coincide, paramos aquí
+         IF       (?esr16)
+            EXITM    ;salir de macro ?reg
+         ENDIF
+;; Si aún no coincide, probar con el resto
+         IRP      reg,<ah,bh,ch,dh,al,bl,cl,dl>
+            IFIDN <&&reg>,<&arg>
+               ?esr8 = CIERTO
+               EXITM    ;salir de macro IRP
+            ENDIF
+         ENDM           ;fin de macro IRP
+;; Si coincide, paramos aquí
+         IF       (?esr8)
+            EXITM    ;salir de macro ?reg
+         ENDIF
+;; Si no coincide aún, probamos mayúsculas
+         IRP      reg,<AX,BX,CX,DX,BP,SP,SI,DI,CS,DS,ES,SS>
+;reg se referencia con dos "&" porque está en 2do. nivel anidado
+            IFIDN <&&reg>,<&arg>
+               ?esr16 = CIERTO
+               EXITM    ;salir de macro IRP
+            ENDIF
+         ENDM           ;fin de macro IRP
+;; Si coincide, paramos aquí
+         IF       (?esr16)
+            EXITM    ;salir de macro ?reg
+         ENDIF
+;; Si aún no coincide, probar con el resto
+         IRP      reg,<AH,BH,CH,DH,AL,BL,CL,DL>
+            IFIDN <&&reg>,<&arg>
+               ?esr8 = CIERTO
+               EXITM    ;salir de macro IRP
+            ENDIF
+         ENDM           ;fin de macro IRP
+      ENDM              ;fin de macro ?reg
+;***********************************
+; MACRO PARA COLOCAR DATOS DE TIPO
+; INMEDIATO EN LA PILA (USO INTERNO)
+;***********************************
+push_im  MACRO arg
+   push  bp          ;;guarda puntero base en la pila
+   mov   bp,sp       ;;coloca puntero de pila en BP
+   push  ax          ;;guarda el acumulador
+   mov   ax,&arg     ;;obtiene dato de tipo inmediato
+   xchg  [bp],ax     ;;intercambia BP anterior y dato inm.
+                     ;;mediante direcc. indirecto de reg.
+   mov   bp,ax       ;;restaura BP anterior de AX
+   pop   ax          ;;restaura acumulador
+   ENDM
+;***********************************
+; MACRO PARA COLOCAR DESPLAZAMIENTO DE
+; DATOS DE TIPO INMEDIATO EN LA PILA
+; (USO INTERNO)
+;***********************************
+push_imof MACRO arg
+   push  bp             ;;guarda puntero base
+   mov   bp,sp          ;;coloca puntero pila en BP
+   push  ax             ;;guarda acumulador
+   mov   ax,offset &arg ;;obtiene desplazamiento
+   xchg  [bp],ax        ;;intercambia BP anterior y dato inm.
+   mov   bp,ax          ;;restaura BP ant. a partir de AX
+   pop   ax             ;;restaura acumulador
+   ENDM
+;**************************************
+; MACRO GENERALIZADA PARA LA COLOCACION
+; DE OPERANDOS EN LA PILA.
+; EL OPERANDO PUEDE SER:
+;     REGISTRO
+;     REFERENCIA DE DATOS
+;**************************************
+push_op  MACRO    arg
+   IFDEF    &arg                 ;;si el operando está definido...
+      ?argtyp = .TYPE &arg       ;;...obtiene el tipo
+      IF ((?argtyp AND 3) EQ 2)  ;;el operando es de tipo DATO
+         ?argsiz = ((TYPE &arg) + 1)/2 ;;...obtiene tamaño en palabras
+         ?argoff = 0                   ;;...fija desplaz. a 0
+         REPT ?argsiz                  ;;...repite cada palabra
+            ?argadd = WORD PTR &arg + ?argoff ;;obtiene ptr de tipo
+            push ?argadd      ;;...coloca en pila desde memoria
+            ?argoff = ?argoff + 2   ;;...sig. palabra de datos
+         ENDM     ;;fin de REPT
+      ENDIF
+      IF ((?argtyp AND 3) EQ 1)  ;;el operando es de tipo PROGRAMA
+         push_imof &arg          ;;...desplaz. etiq. a pila
+      ENDIF
+      IFE (?argtyp AND 3)  ;;si es cierto que igual a cero...
+                           ;;el operando es de tipo ABSOLUTO
+         ?reg &arg
+         IF (?esr16)    ;;el operando es registro de 16
+            push &arg
+         ELSE
+            IF (?esr8)  ;;el operando es registro de 8
+               IRPC chr1,&arg
+                  push &&chr1&&x ;;coloca registro corto en pila
+                  EXITM ;;salir de IRPC
+               ENDM  ;;fin de IRPC
+            ELSE              ;;presupone de tipo inmediato
+               push_im &arg   ;;...coloca tipo inmediato
+            ENDIF
+         ENDIF
+      ENDIF
+   ELSE        ;;...coloca tipo inmediato
+      push_im &arg
+   ENDIF
+ENDM  ;;fin de push_op
+
+
+
